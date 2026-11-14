@@ -20,24 +20,12 @@ async function showFAQList(chatId, messageId, page = 1, user) {
   const currentPage = result.page;
   const isOwner = await isAdmin(user);
 
-  const keyboard = result.faqs.map((faq) => {
-    const questionButton = {
+  const keyboard = result.faqs.map((faq) => [
+    {
       text: faq.question.slice(0, 55),
       callback_data: `faq:view:${faq._id}:${currentPage}`,
-    };
-
-    if (isOwner) {
-      return [
-        questionButton,
-        {
-          text: "⋮",
-          callback_data: `faq:admin:${faq._id}:${currentPage}`,
-        },
-      ];
-    }
-
-    return [questionButton];
-  });
+    },
+  ]);
 
   if (isOwner) {
     keyboard.push([
