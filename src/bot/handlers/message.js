@@ -7,7 +7,13 @@ const {
   saveSharedPassword,
   getBotSettings,
 } = require("../../modules/auth/service");
-
+const {
+  createFAQ,
+  getFAQs,
+  getFAQById,
+  updateFAQ,
+  deleteFAQ,
+} = require("../../modules/faq/service");
 const {
   sendMessage,
   deleteMessage,
@@ -69,6 +75,107 @@ async function handleTelegramUpdate(update) {
       "Available commands:\n/start - Start the bot\n/help - Show help",
     );
     return;
+  }
+  // CANCEL
+  if (command === "/cancel") {
+    user.conversationState = null;
+    user.conversationData = null;
+    await user.save();
+
+    await sendMessage(chatId, "Operation cancelled.");
+    return;
+  }
+
+  // FAQ ADMIN COMMANDS
+  if (["/addqa", "/listqa", "/editqa", "/deleteqa"].includes(command)) {
+    if (!(await isAdmin(user))) {
+      await sendMessage(chatId, "Access denied.");
+      return;
+    }
+
+    const args = text.split(/\s+/).slice(1);
+
+    // ADD FAQ
+    if (command === "/addqa") {
+      user.conversationState = "awaiting_faq_question";
+      user.conversationData = null;
+      await user.save();
+
+      await sendMessage(chatId, "Send the FAQ question.");
+      return;
+    }
+
+    // LIST FAQS
+    if (command === "/listqa") {
+      const result = await getFAQs(1, 8);
+
+      if (!result.total) {
+        await sendMessage(chatId, "No FAQs have been added yet.");
+        return;
+      }
+
+      const faqList = result.faqs
+        .map(
+          (faq, index) =>
+            `${index + 1}. ${faq.question.slice(0, 120)}\nID: ${faq._id}`,
+        )
+        .join("\n\n");
+
+      await sendMessage(chatId, `FAQs (${result.total} total):\n\n${faqList}`);
+      return;
+    }
+
+    // EDIT FAQ
+    if (command === "/editqa") {
+      const faqId = args[0];
+
+      if (!faqId) {
+        await sendMessage(chatId, "Usage: /editqa FAQ_ID");
+        return;
+      }
+
+      const faq = await getFAQById(faqId);
+
+      if (!faq) {
+        await sendMessage(chatId, "FAQ not found.");
+        return;
+      }
+
+      user.conversationState = "awaiting_faq_edit_question";
+      user.conversationData = {
+        faqId: faq._id.toString(),
+        originalQuestion: faq.question,
+        originalAnswer: faq.answer,
+      };
+
+      await user.save();
+
+      await sendMessage(
+        chatId,
+        `Current question:\n${faq.question}\n\nSend the new question, or /skip to keep it.`,
+      );
+      return;
+    }
+
+    // DELETE FAQ
+    if (command === "/deleteqa") {
+      const faqId = args[0];
+
+      if (!faqId) {
+        await sendMessage(chatId, "Usage: /deleteqa FAQ_ID");
+        return;
+      }
+
+      const deletedFAQ = await deleteFAQ(faqId);
+
+      if (!deletedFAQ) {
+        await sendMessage(chatId, "FAQ not found.");
+        return;
+      }
+
+      await sendMessage(chatId, "FAQ deleted successfully.");
+      return;
+    }
   }
 
   const settings = await getBotSettings();
@@ -136,6 +243,153 @@ async function handleTelegramUpdate(update) {
 
   // CONVERSATION STATES
   switch (user.conversationState) {
+    case "awaiting_faq_question": {
+      if (!(await isAdmin(user))) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(chatId, "Access denied.");
+        return;
+      }
+
+      if (text.length > 500) {
+        await sendMessage(
+          chatId,
+          "Question is too long. Maximum length is 500 characters.",
+        );
+        return;
+      }
+
+      user.conversationData = { question: text };
+      user.conversationState = "awaiting_faq_answer";
+      await user.save();
+
+      await sendMessage(chatId, "Now send the answer.");
+      return;
+    }
+
+    case "awaiting_faq_answer": {
+      if (!(await isAdmin(user))) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(chatId, "Access denied.");
+        return;
+      }
+
+      if (text.length > 4000) {
+        await sendMessage(
+          chatId,
+          "Answer is too long. Maximum length is 4000 characters.",
+        );
+        return;
+      }
+
+      if (!user.conversationData?.question) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(
+          chatId,
+          "Something went wrong. Please start again with /addqa.",
+        );
+        return;
+      }
+
+      await createFAQ(user.conversationData.question, text, user.telegramId);
+
+      user.conversationState = null;
+      user.conversationData = null;
+      await user.save();
+
+      await sendMessage(chatId, "FAQ added successfully!");
+      return;
+    }
+
+    case "awaiting_faq_edit_question": {
+      if (!(await isAdmin(user))) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(chatId, "Access denied.");
+        return;
+      }
+
+      if (!user.conversationData?.faqId) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(
+          chatId,
+          "Something went wrong. Please start again with /editqa.",
+        );
+        return;
+      }
+
+      if (text !== "/skip") {
+        if (text.length > 500) {
+          await sendMessage(
+            chatId,
+            "Question is too long. Maximum length is 500 characters.",
+          );
+          return;
+        }
+
+        user.conversationData.updatedQuestion = text;
+      }
+
+      user.conversationState = "awaiting_faq_edit_answer";
+      await user.save();
+
+      await sendMessage(
+        chatId,
+        `Current answer:\n${user.conversationData.originalAnswer}\n\nSend the new answer, or /skip to keep it.`,
+      );
+      return;
+    }
+
+    case "awaiting_faq_edit_answer": {
+      if (!(await isAdmin(user))) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(chatId, "Access denied.");
+        return;
+      }
+
+      const data = user.conversationData;
+
+      if (!data?.faqId) {
+        user.conversationState = null;
+        user.conversationData = null;
+        await user.save();
+        await sendMessage(
+          chatId,
+          "Something went wrong. Please start again with /editqa.",
+        );
+        return;
+      }
+
+      if (text !== "/skip" && text.length > 4000) {
+        await sendMessage(
+          chatId,
+          "Answer is too long. Maximum length is 4000 characters.",
+        );
+        return;
+      }
+
+      await updateFAQ(data.faqId, {
+        question: data.updatedQuestion || data.originalQuestion,
+        answer: text === "/skip" ? data.originalAnswer : text,
+      });
+
+      user.conversationState = null;
+      user.conversationData = null;
+      await user.save();
+
+      await sendMessage(chatId, "FAQ updated successfully!");
+      return;
+    }
     case "awaiting_owner_secret": {
       await removeSensitiveMessage(chatId, message.message_id);
 
