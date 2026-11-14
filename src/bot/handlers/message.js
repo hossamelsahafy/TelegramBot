@@ -18,10 +18,12 @@ const handleFAQCallback = require("../callbacks/faq");
 const handleBlockedCallback = require("../callbacks/blocked");
 
 const handleFAQConversation = require("../conversations/faq");
-const handleFAQCommand = require("../commands/faq");
 const handleAuthConversation = require("../conversations/auth");
+const handleQuestionConversation = require("../conversations/question");
 
+const handleFAQCommand = require("../commands/faq");
 const { handleBlockedCommand } = require("../commands/blocked");
+const handleQuestionCallback = require("../callbacks/question");
 
 async function handleTelegramUpdate(update) {
   // CALLBACK QUERIES
@@ -31,6 +33,8 @@ async function handleTelegramUpdate(update) {
 
     if (callbackData.startsWith("blocked:")) {
       await handleBlockedCallback(callbackQuery);
+    } else if (callbackData.startsWith("question:")) {
+      await handleQuestionCallback(callbackQuery);
     } else {
       await handleFAQCallback(callbackQuery);
     }
@@ -72,10 +76,19 @@ async function handleTelegramUpdate(update) {
 
   // HELP
   if (command === "/help") {
-    await sendMessage(
-      chatId,
-      "Available commands:\n/start - Start the bot\n/help - Show help\n/blocked - View blocked users (admin only)\n/cancel - Cancel current operation",
-    );
+    const owner = await isAdmin(user);
+
+    let helpText =
+      "Available commands:\n" +
+      "/start - Start the bot\n" +
+      "/help - Show help\n" +
+      "/cancel - Cancel current operation";
+
+    if (owner) {
+      helpText += "\n/blocked - View blocked users";
+    }
+
+    await sendMessage(chatId, helpText);
     return;
   }
 
@@ -98,6 +111,10 @@ async function handleTelegramUpdate(update) {
     }
 
     if (await handleAuthConversation(user, chatId, text, message.message_id)) {
+      return;
+    }
+
+    if (await handleQuestionConversation(user, chatId, text)) {
       return;
     }
   }

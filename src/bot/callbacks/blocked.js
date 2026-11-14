@@ -36,7 +36,6 @@ async function handleBlockedCallback(callbackQuery) {
 
   await answerCallbackQuery(callbackQuery.id);
 
-  // PAGINATION
   if (operation === "page") {
     await showBlockedUsers(
       chatId,
@@ -47,7 +46,6 @@ async function handleBlockedCallback(callbackQuery) {
     return;
   }
 
-  // CONFIRM UNBLOCK
   if (operation === "confirm") {
     if (!/^\d+$/.test(telegramId || "")) {
       await editMessageText(chatId, messageId, "Invalid user ID.");
@@ -78,13 +76,11 @@ async function handleBlockedCallback(callbackQuery) {
     return;
   }
 
-  // CANCEL
   if (operation === "cancel") {
     await showBlockedUsers(chatId, user, page, messageId);
     return;
   }
 
-  // UNBLOCK
   if (operation === "unblock") {
     if (!/^\d+$/.test(telegramId || "")) {
       await editMessageText(chatId, messageId, "Invalid user ID.");

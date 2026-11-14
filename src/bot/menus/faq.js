@@ -34,6 +34,13 @@ async function showFAQList(chatId, messageId, page = 1, user) {
         callback_data: "faq:add",
       },
     ]);
+  } else {
+    keyboard.push([
+      {
+        text: "❓ Ask a Question",
+        callback_data: "question:ask",
+      },
+    ]);
   }
 
   const navigation = [];
