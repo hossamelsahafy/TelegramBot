@@ -73,11 +73,13 @@ async function handleFAQCallback(callbackQuery) {
   // VIEW FAQ
   if (action === "faq" && operation === "view") {
     if (!(await isAdmin(user)) && !(await isUserAuthenticated(user))) {
-      await answerCallbackQuery(
-        callbackQuery.id,
-        "Please authenticate first.",
-        true,
-      );
+      await editMessageText(chatId, messageId, "Please authenticate first.", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⌂ Main Menu", callback_data: "main:menu" }],
+          ],
+        },
+      });
       return;
     }
 
@@ -97,16 +99,30 @@ async function handleFAQCallback(callbackQuery) {
       return;
     }
 
+    const isOwner = await isAdmin(user);
+
+    const keyboard = [];
+
+    if (isOwner) {
+      keyboard.push([
+        { text: "✏️ Edit", callback_data: `faq:edit:${faqId}:${page}` },
+        { text: "🗑 Delete", callback_data: `faq:delete:${faqId}:${page}` },
+      ]);
+    }
+
+    keyboard.push([
+      { text: "‹ Back to FAQs", callback_data: `faq:page:${page}` },
+    ]);
+
+    keyboard.push([{ text: "⌂ Main Menu", callback_data: "main:menu" }]);
+
     await editMessageText(
       chatId,
       messageId,
       `Question:\n${faq.question}\n\nAnswer:\n${faq.answer}`,
       {
         reply_markup: {
-          inline_keyboard: [
-            [{ text: "‹ Back to FAQs", callback_data: `faq:page:${page}` }],
-            [{ text: "⌂ Main Menu", callback_data: "main:menu" }],
-          ],
+          inline_keyboard: keyboard,
         },
       },
     );
@@ -197,7 +213,7 @@ async function handleFAQCallback(callbackQuery) {
     return;
   }
 
-  // ADMIN FAQ OPTIONS
+  // ADMIN FAQ OPTIONS / DETAILS
   if (action === "faq" && operation === "admin") {
     const faqId = parts[2];
     const page = Math.max(1, Number(parts[3]) || 1);
@@ -208,18 +224,26 @@ async function handleFAQCallback(callbackQuery) {
       return;
     }
 
-    await editMessageText(chatId, messageId, `Manage FAQ:\n\n${faq.question}`, {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✏️ Edit", callback_data: `faq:edit:${faqId}:${page}` },
-            { text: "🗑 Delete", callback_data: `faq:delete:${faqId}:${page}` },
+    await editMessageText(
+      chatId,
+      messageId,
+      `Question:\n${faq.question}\n\nAnswer:\n${faq.answer}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✏️ Edit", callback_data: `faq:edit:${faqId}:${page}` },
+              {
+                text: "🗑 Delete",
+                callback_data: `faq:delete:${faqId}:${page}`,
+              },
+            ],
+            [{ text: "‹ Back to FAQs", callback_data: `faq:page:${page}` }],
+            [{ text: "⌂ Main Menu", callback_data: "main:menu" }],
           ],
-          [{ text: "‹ Back to FAQs", callback_data: `faq:page:${page}` }],
-          [{ text: "⌂ Main Menu", callback_data: "main:menu" }],
-        ],
+        },
       },
-    });
+    );
     return;
   }
 
