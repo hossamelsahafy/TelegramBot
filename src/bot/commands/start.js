@@ -60,7 +60,18 @@ async function startCommand(chatId, user) {
 
   await sendMessage(
     chatId,
-    "Welcome!\n\nPlease send the shared password to access the bot.",
+    "Welcome, owner!\n\n" +
+      "Password Management:\n" +
+      "/setpassword - Set the shared password\n" +
+      "/changepassword - Change the shared password\n\n" +
+      "FAQ Management:\n" +
+      "/addqa - Add a question and answer\n" +
+      "/listqa - List all FAQs\n" +
+      "/editqa FAQ_ID - Edit an FAQ\n" +
+      "/deleteqa FAQ_ID - Delete an FAQ\n\n" +
+      "General:\n" +
+      "/help - Show help\n" +
+      "/cancel - Cancel the current operation",
   );
 }
 
