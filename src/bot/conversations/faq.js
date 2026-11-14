@@ -88,6 +88,7 @@ async function handleFAQConversation(user, chatId, text) {
         }
 
         user.conversationData.updatedQuestion = text;
+        user.markModified("conversationData");
       }
 
       user.conversationState = "awaiting_faq_edit_answer";
@@ -109,29 +110,36 @@ async function handleFAQConversation(user, chatId, text) {
 
       const data = user.conversationData;
 
+      await sendMessage(
+        chatId,
+        `DEBUG BEFORE UPDATE:
+FAQ ID: ${data?.faqId}
+Original Question: ${data?.originalQuestion}
+Updated Question: ${data?.updatedQuestion}
+Original Answer: ${data?.originalAnswer}
+New Answer: ${text}`,
+      );
+
       if (!data?.faqId) {
         await clearConversation(user);
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /editqa.",
-        );
+        await sendMessage(chatId, "Something went wrong. Please start again.");
         return true;
       }
 
-      if (text !== "/skip" && text.length > 4000) {
-        await sendMessage(
-          chatId,
-          "Answer is too long. Maximum length is 4000 characters.",
-        );
-        return true;
-      }
-
-      await updateFAQ(data.faqId, {
+      const updatedFAQ = await updateFAQ(data.faqId, {
         question: data.updatedQuestion || data.originalQuestion,
-        answer: text === "/skip" ? data.originalAnswer : text,
+        answer: text,
       });
 
+      console.log("UPDATED FAQ RESULT:", updatedFAQ);
+
       await clearConversation(user);
+
+      if (!updatedFAQ) {
+        await sendMessage(chatId, "FAQ not found or could not be updated.");
+        return true;
+      }
+
       await sendMessage(chatId, "FAQ updated successfully!");
       return true;
     }
