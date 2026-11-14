@@ -45,8 +45,6 @@ async function startCommand(chatId, user) {
         "FAQ Management:\n" +
         "/addqa - Add a question and answer\n" +
         "/listqa - List all FAQs\n" +
-        "/editqa FAQ_ID - Edit an FAQ\n" +
-        "/deleteqa FAQ_ID - Delete an FAQ\n\n" +
         "User Management:\n" +
         "/blocked - View and manage blocked users\n\n" +
         "General:\n" +
