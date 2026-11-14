@@ -47,20 +47,37 @@ async function getFAQById(faqId) {
   return FAQ.findById(faqId).lean();
 }
 
-const updatedFAQ = await updateFAQ(data.faqId, {
-  question: data.updatedQuestion || data.originalQuestion,
-  answer: text,
-});
+async function updateFAQ(faqId, updates) {
+  if (!/^[a-f\d]{24}$/i.test(faqId)) {
+    return null;
+  }
 
-if (!updatedFAQ) {
-  await sendMessage(chatId, "DEBUG: FAQ was not found.");
-  return true;
+  const allowedUpdates = {};
+
+  if (typeof updates.question === "string") {
+    allowedUpdates.question = updates.question.trim();
+  }
+
+  if (typeof updates.answer === "string") {
+    allowedUpdates.answer = updates.answer.trim();
+  }
+
+  if (
+    Object.keys(allowedUpdates).length === 0 ||
+    Object.values(allowedUpdates).some((value) => !value)
+  ) {
+    throw new Error("Valid question or answer is required");
+  }
+
+  return FAQ.findByIdAndUpdate(
+    faqId,
+    { $set: allowedUpdates },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
 }
-
-await sendMessage(
-  chatId,
-  `DEBUG RESULT:\n\nQuestion: ${updatedFAQ.question}\n\nAnswer: ${updatedFAQ.answer}`,
-);
 
 async function deleteFAQ(faqId) {
   if (!/^[a-f\d]{24}$/i.test(faqId)) {
