@@ -22,8 +22,6 @@ const {
 const { safeEditMessage, getInputKeyboard } = require("../utils/telegram");
 
 async function handleFAQCallback(callbackQuery) {
-  console.log("CALLBACK RECEIVED:", callbackQuery.data);
-
   const callbackData = callbackQuery.data || "";
   const message = callbackQuery.message;
 
