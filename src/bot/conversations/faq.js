@@ -110,16 +110,6 @@ async function handleFAQConversation(user, chatId, text) {
 
       const data = user.conversationData;
 
-      await sendMessage(
-        chatId,
-        `DEBUG BEFORE UPDATE:
-FAQ ID: ${data?.faqId}
-Original Question: ${data?.originalQuestion}
-Updated Question: ${data?.updatedQuestion}
-Original Answer: ${data?.originalAnswer}
-New Answer: ${text}`,
-      );
-
       if (!data?.faqId) {
         await clearConversation(user);
         await sendMessage(chatId, "Something went wrong. Please start again.");
@@ -128,7 +118,7 @@ New Answer: ${text}`,
 
       const updatedFAQ = await updateFAQ(data.faqId, {
         question: data.updatedQuestion || data.originalQuestion,
-        answer: text,
+        answer: text === "/skip" ? data.originalAnswer : text,
       });
 
       console.log("UPDATED FAQ RESULT:", updatedFAQ);
