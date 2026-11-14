@@ -20,6 +20,17 @@ const handleFAQCommand = require("../commands/faq");
 const handleAuthConversation = require("../conversations/auth");
 
 async function handleTelegramUpdate(update) {
+  async function handleTelegramUpdate(update) {
+    console.log("INCOMING UPDATE:", {
+      updateId: update?.update_id,
+      type: update?.callback_query ? "callback_query" : "message",
+      callbackData: update?.callback_query?.data,
+      messageText: update?.message?.text,
+      time: new Date().toISOString(),
+    });
+
+    // باقي الكود
+  }
   if (update?.callback_query) {
     await handleFAQCallback(update.callback_query);
     return;
