@@ -69,34 +69,35 @@ async function handleFAQConversation(user, chatId, text) {
         return true;
       }
 
-      if (!user.conversationData?.faqId) {
+      const data = user.conversationData;
+
+      if (!data?.faqId) {
         await clearConversation(user);
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /editqa.",
-        );
+        await sendMessage(chatId, "Something went wrong. Please start again.");
         return true;
       }
 
       if (text !== "/skip") {
-        if (text.length > 500) {
+        if (!text.trim() || text.length > 500) {
           await sendMessage(
             chatId,
-            "Question is too long. Maximum length is 500 characters.",
+            "Question must be between 1 and 500 characters.",
           );
           return true;
         }
 
-        user.conversationData.updatedQuestion = text;
+        data.updatedQuestion = text.trim();
       }
 
       user.conversationState = "awaiting_faq_edit_answer";
+      user.conversationData = data;
       await user.save();
 
       await sendMessage(
         chatId,
-        `Current answer:\n${user.conversationData.originalAnswer}\n\nSend the new answer, or /skip to keep it.`,
+        `Current answer:\n${data.originalAnswer}\n\nSend the new answer, or /skip to keep it.`,
       );
+
       return true;
     }
 
@@ -111,28 +112,36 @@ async function handleFAQConversation(user, chatId, text) {
 
       if (!data?.faqId) {
         await clearConversation(user);
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /editqa.",
-        );
+        await sendMessage(chatId, "Something went wrong. Please start again.");
         return true;
       }
 
-      if (text !== "/skip" && text.length > 4000) {
-        await sendMessage(
-          chatId,
-          "Answer is too long. Maximum length is 4000 characters.",
-        );
-        return true;
+      if (text !== "/skip") {
+        if (!text.trim() || text.length > 4000) {
+          await sendMessage(
+            chatId,
+            "Answer must be between 1 and 4000 characters.",
+          );
+          return true;
+        }
+
+        data.updatedAnswer = text.trim();
       }
 
-      await updateFAQ(data.faqId, {
+      const updatedFAQ = await updateFAQ(data.faqId, {
         question: data.updatedQuestion || data.originalQuestion,
-        answer: text === "/skip" ? data.originalAnswer : text,
+        answer: data.updatedAnswer || data.originalAnswer,
       });
+
+      if (!updatedFAQ) {
+        await clearConversation(user);
+        await sendMessage(chatId, "FAQ not found. Please try again.");
+        return true;
+      }
 
       await clearConversation(user);
       await sendMessage(chatId, "FAQ updated successfully!");
+
       return true;
     }
 
