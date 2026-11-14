@@ -21,12 +21,31 @@ async function telegramRequest(method, payload) {
   return data.result;
 }
 
-async function sendMessage(chatId, text) {
+async function sendMessage(chatId, text, options = {}) {
   return telegramRequest("sendMessage", {
     chat_id: chatId,
     text,
+    ...options,
   });
 }
+
+async function editMessageText(chatId, messageId, text, options = {}) {
+  return telegramRequest("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    ...options,
+  });
+}
+
+async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
+  return telegramRequest("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    ...(text ? { text } : {}),
+    show_alert: showAlert,
+  });
+}
+
 async function deleteMessage(chatId, messageId) {
   return telegramRequest("deleteMessage", {
     chat_id: chatId,
@@ -37,5 +56,7 @@ async function deleteMessage(chatId, messageId) {
 module.exports = {
   telegramRequest,
   sendMessage,
+  editMessageText,
+  answerCallbackQuery,
   deleteMessage,
 };

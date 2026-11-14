@@ -6,10 +6,14 @@ const {
 
 const { sendMessage } = require("../../modules/telegram/service");
 
+const { clearConversation } = require("../utils/conversation");
+
 async function startCommand(chatId, user) {
   const settings = await getBotSettings();
 
   if (!settings.setupCompleted) {
+    await clearConversation(user);
+
     await sendMessage(
       chatId,
       "Welcome!\n\nThe bot has not been configured yet. The owner must send /setup to begin setup.",
@@ -19,6 +23,8 @@ async function startCommand(chatId, user) {
 
   // OWNER
   if (await isAdmin(user)) {
+    await clearConversation(user);
+
     if (!settings.passwordHash) {
       user.conversationState = "awaiting_initial_password";
       await user.save();
@@ -50,6 +56,8 @@ async function startCommand(chatId, user) {
 
   // USER
   if (!settings.passwordHash) {
+    await clearConversation(user);
+
     await sendMessage(
       chatId,
       "The bot is not ready yet. Please contact the owner.",
@@ -58,8 +66,7 @@ async function startCommand(chatId, user) {
   }
 
   if (await isUserAuthenticated(user)) {
-    user.conversationState = null;
-    await user.save();
+    await clearConversation(user);
 
     await sendMessage(
       chatId,
@@ -80,6 +87,9 @@ async function startCommand(chatId, user) {
     return;
   }
 
+  await clearConversation(user);
+
+  await user.save();
   user.conversationState = "awaiting_shared_password";
   await user.save();
 

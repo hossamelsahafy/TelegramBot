@@ -1,47 +1,36 @@
 const {
   authenticateTelegramUser,
-  setupOwner,
   isAdmin,
   isUserAuthenticated,
-  authenticateUser,
-  saveSharedPassword,
   getBotSettings,
 } = require("../../modules/auth/service");
+
+const { sendMessage } = require("../../modules/telegram/service");
+
 const {
-  createFAQ,
-  getFAQs,
-  getFAQById,
-  updateFAQ,
-  deleteFAQ,
-} = require("../../modules/faq/service");
-const {
-  sendMessage,
-  deleteMessage,
-} = require("../../modules/telegram/service");
+  setConversationState,
+  clearConversation,
+} = require("../utils/conversation");
 
 const startCommand = require("../commands/start");
 
-async function removeSensitiveMessage(chatId, messageId) {
-  try {
-    await deleteMessage(chatId, messageId);
-  } catch (error) {
-    console.error("Could not delete sensitive message:", error.message);
-  }
-}
-
-async function setConversationState(user, state) {
-  user.conversationState = state;
-  await user.save();
-}
+const handleFAQCallback = require("../callbacks/faq");
+const handleFAQConversation = require("../conversations/faq");
+const handleFAQCommand = require("../commands/faq");
+const handleAuthConversation = require("../conversations/auth");
 
 async function handleTelegramUpdate(update) {
+  if (update?.callback_query) {
+    await handleFAQCallback(update.callback_query);
+    return;
+  }
+
   const message = update?.message;
 
   if (!message?.from || !message?.chat) {
     return;
   }
 
-  // Only handle private chats.
   if (message.chat.type !== "private") {
     return;
   }
@@ -72,114 +61,32 @@ async function handleTelegramUpdate(update) {
   if (command === "/help") {
     await sendMessage(
       chatId,
-      "Available commands:\n/start - Start the bot\n/help - Show help",
+      "Available commands:\n/start - Start the bot\n/help - Show help\n/cancel - Cancel current operation",
     );
     return;
   }
+
   // CANCEL
   if (command === "/cancel") {
-    user.conversationState = null;
-    user.conversationData = null;
-    await user.save();
-
+    await clearConversation(user);
     await sendMessage(chatId, "Operation cancelled.");
     return;
   }
 
+  // HANDLE ACTIVE CONVERSATIONS FIRST
+  if (user.conversationState) {
+    if (await handleFAQConversation(user, chatId, text)) {
+      return;
+    }
+
+    if (await handleAuthConversation(user, chatId, text, message.message_id)) {
+      return;
+    }
+  }
+
   // FAQ ADMIN COMMANDS
-  if (["/addqa", "/listqa", "/editqa", "/deleteqa"].includes(command)) {
-    if (!(await isAdmin(user))) {
-      await sendMessage(chatId, "Access denied.");
-      return;
-    }
-
-    const args = text.split(/\s+/).slice(1);
-
-    // ADD FAQ
-    if (command === "/addqa") {
-      user.conversationState = "awaiting_faq_question";
-      user.conversationData = null;
-      await user.save();
-
-      await sendMessage(chatId, "Send the FAQ question.");
-      return;
-    }
-
-    // LIST FAQS
-
-    if (command === "/listqa") {
-      const result = await getFAQs(1, 8);
-
-      if (!result.total) {
-        await sendMessage(chatId, "No FAQs have been added yet.");
-        return;
-      }
-
-      const faqList = result.faqs
-        .map(
-          (faq, index) =>
-            `${index + 1}. Question:\n${faq.question}\n\n` +
-            `Answer:\n${faq.answer}\n\n` +
-            `ID: ${faq._id}`,
-        )
-        .join("\n\n--------------------\n\n");
-
-      await sendMessage(chatId, `FAQs (${result.total} total):\n\n${faqList}`);
-
-      return;
-    }
-
-    // EDIT FAQ
-    if (command === "/editqa") {
-      const faqId = args[0];
-
-      if (!faqId) {
-        await sendMessage(chatId, "Usage: /editqa FAQ_ID");
-        return;
-      }
-
-      const faq = await getFAQById(faqId);
-
-      if (!faq) {
-        await sendMessage(chatId, "FAQ not found.");
-        return;
-      }
-
-      user.conversationState = "awaiting_faq_edit_question";
-      user.conversationData = {
-        faqId: faq._id.toString(),
-        originalQuestion: faq.question,
-        originalAnswer: faq.answer,
-      };
-
-      await user.save();
-
-      await sendMessage(
-        chatId,
-        `Current question:\n${faq.question}\n\nSend the new question, or /skip to keep it.`,
-      );
-      return;
-    }
-
-    // DELETE FAQ
-    if (command === "/deleteqa") {
-      const faqId = args[0];
-
-      if (!faqId) {
-        await sendMessage(chatId, "Usage: /deleteqa FAQ_ID");
-        return;
-      }
-
-      const deletedFAQ = await deleteFAQ(faqId);
-
-      if (!deletedFAQ) {
-        await sendMessage(chatId, "FAQ not found.");
-        return;
-      }
-
-      await sendMessage(chatId, "FAQ deleted successfully.");
-      return;
-    }
+  if (await handleFAQCommand(user, chatId, text, command)) {
+    return;
   }
 
   const settings = await getBotSettings();
@@ -245,253 +152,9 @@ async function handleTelegramUpdate(update) {
     return;
   }
 
-  // CONVERSATION STATES
-  switch (user.conversationState) {
-    case "awaiting_faq_question": {
-      if (!(await isAdmin(user))) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(chatId, "Access denied.");
-        return;
-      }
-
-      if (text.length > 500) {
-        await sendMessage(
-          chatId,
-          "Question is too long. Maximum length is 500 characters.",
-        );
-        return;
-      }
-
-      user.conversationData = { question: text };
-      user.conversationState = "awaiting_faq_answer";
-      await user.save();
-
-      await sendMessage(chatId, "Now send the answer.");
-      return;
-    }
-
-    case "awaiting_faq_answer": {
-      if (!(await isAdmin(user))) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(chatId, "Access denied.");
-        return;
-      }
-
-      if (text.length > 4000) {
-        await sendMessage(
-          chatId,
-          "Answer is too long. Maximum length is 4000 characters.",
-        );
-        return;
-      }
-
-      if (!user.conversationData?.question) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /addqa.",
-        );
-        return;
-      }
-
-      await createFAQ(user.conversationData.question, text, user.telegramId);
-
-      user.conversationState = null;
-      user.conversationData = null;
-      await user.save();
-
-      await sendMessage(chatId, "FAQ added successfully!");
-      return;
-    }
-
-    case "awaiting_faq_edit_question": {
-      if (!(await isAdmin(user))) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(chatId, "Access denied.");
-        return;
-      }
-
-      if (!user.conversationData?.faqId) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /editqa.",
-        );
-        return;
-      }
-
-      if (text !== "/skip") {
-        if (text.length > 500) {
-          await sendMessage(
-            chatId,
-            "Question is too long. Maximum length is 500 characters.",
-          );
-          return;
-        }
-
-        user.conversationData.updatedQuestion = text;
-      }
-
-      user.conversationState = "awaiting_faq_edit_answer";
-      await user.save();
-
-      await sendMessage(
-        chatId,
-        `Current answer:\n${user.conversationData.originalAnswer}\n\nSend the new answer, or /skip to keep it.`,
-      );
-      return;
-    }
-
-    case "awaiting_faq_edit_answer": {
-      if (!(await isAdmin(user))) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(chatId, "Access denied.");
-        return;
-      }
-
-      const data = user.conversationData;
-
-      if (!data?.faqId) {
-        user.conversationState = null;
-        user.conversationData = null;
-        await user.save();
-        await sendMessage(
-          chatId,
-          "Something went wrong. Please start again with /editqa.",
-        );
-        return;
-      }
-
-      if (text !== "/skip" && text.length > 4000) {
-        await sendMessage(
-          chatId,
-          "Answer is too long. Maximum length is 4000 characters.",
-        );
-        return;
-      }
-
-      await updateFAQ(data.faqId, {
-        question: data.updatedQuestion || data.originalQuestion,
-        answer: text === "/skip" ? data.originalAnswer : text,
-      });
-
-      user.conversationState = null;
-      user.conversationData = null;
-      await user.save();
-
-      await sendMessage(chatId, "FAQ updated successfully!");
-      return;
-    }
-    case "awaiting_owner_secret": {
-      await removeSensitiveMessage(chatId, message.message_id);
-
-      const result = await setupOwner(user, text);
-
-      if (!result.success) {
-        user.conversationState = null;
-        await user.save();
-
-        await sendMessage(
-          chatId,
-          result.reason === "ALREADY_CONFIGURED"
-            ? "Owner setup has already been completed."
-            : "Invalid setup secret. Please try again with /setup.",
-        );
-        return;
-      }
-
-      user.conversationState = "awaiting_initial_password";
-      await user.save();
-
-      await sendMessage(
-        chatId,
-        "Owner setup completed successfully!\n\nNow send your shared password.",
-      );
-      return;
-    }
-
-    case "awaiting_initial_password":
-    case "awaiting_new_password": {
-      if (!(await isAdmin(user))) {
-        user.conversationState = null;
-        await user.save();
-
-        await sendMessage(chatId, "Access denied.");
-        return;
-      }
-
-      await removeSensitiveMessage(chatId, message.message_id);
-
-      if (text.length < 8 || text.length > 128) {
-        await sendMessage(
-          chatId,
-          "Password must be between 8 and 128 characters. Please try again.",
-        );
-        return;
-      }
-
-      const previousState = user.conversationState;
-
-      await saveSharedPassword(user, text);
-
-      user.conversationState = null;
-      await user.save();
-
-      await sendMessage(
-        chatId,
-        previousState === "awaiting_initial_password"
-          ? "Shared password created successfully!"
-          : "Shared password changed successfully. All users must log in again.",
-      );
-      return;
-    }
-
-    case "awaiting_shared_password": {
-      await removeSensitiveMessage(chatId, message.message_id);
-
-      const result = await authenticateUser(user, text);
-
-      if (!result.success) {
-        await sendMessage(
-          chatId,
-          result.reason === "PASSWORD_NOT_SET"
-            ? "The shared password has not been configured yet."
-            : "Incorrect password. Please try again.",
-        );
-        return;
-      }
-
-      user.conversationState = null;
-      await user.save();
-
-      await sendMessage(
-        chatId,
-        `Welcome ${user.firstName}!\nYou are now authenticated.`,
-      );
-      return;
-    }
-
-    default:
-      break;
-  }
-
   // REQUIRE AUTHENTICATION
   if (!(await isUserAuthenticated(user))) {
-    const currentSettings = await getBotSettings();
-
-    if (!currentSettings.passwordHash) {
+    if (!settings.passwordHash) {
       await sendMessage(
         chatId,
         "The bot is not ready yet. Please contact the owner.",
@@ -509,7 +172,10 @@ async function handleTelegramUpdate(update) {
   }
 
   // AUTHENTICATED USER COMMANDS
-  await sendMessage(chatId, "HELLO YA BDANY");
+  await sendMessage(
+    chatId,
+    "Unknown command. Send /help to see available commands.",
+  );
 }
 
 module.exports = handleTelegramUpdate;
