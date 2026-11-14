@@ -44,7 +44,7 @@ async function startCommand(chatId, user) {
         "/changepassword - Change the shared password\n\n" +
         "FAQ Management:\n" +
         "/addqa - Add a question and answer\n" +
-        "/listqa - List all FAQs\n" +
+        "/listqa - List all FAQs\n\n" +
         "User Management:\n" +
         "/blocked - View and manage blocked users\n\n" +
         "General:\n" +
