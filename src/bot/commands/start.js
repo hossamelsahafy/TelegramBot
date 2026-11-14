@@ -47,6 +47,8 @@ async function startCommand(chatId, user) {
         "/listqa - List all FAQs\n" +
         "/editqa FAQ_ID - Edit an FAQ\n" +
         "/deleteqa FAQ_ID - Delete an FAQ\n\n" +
+        "User Management:\n" +
+        "/blocked - View and manage blocked users\n\n" +
         "General:\n" +
         "/help - Show help\n" +
         "/cancel - Cancel the current operation",
@@ -89,7 +91,6 @@ async function startCommand(chatId, user) {
 
   await clearConversation(user);
 
-  await user.save();
   user.conversationState = "awaiting_shared_password";
   await user.save();
 
