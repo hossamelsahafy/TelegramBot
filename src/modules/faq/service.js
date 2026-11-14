@@ -73,7 +73,7 @@ async function updateFAQ(faqId, updates) {
     faqId,
     { $set: allowedUpdates },
     {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     },
   );
