@@ -1,4 +1,4 @@
-const FAQ = require("../../database/models/FAQ/model");
+const FAQ = require("../../database/models/faq/model");
 
 async function createFAQ(question, answer, createdBy) {
   if (
