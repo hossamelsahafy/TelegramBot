@@ -106,6 +106,7 @@ async function handleTelegramUpdate(update) {
     }
 
     // LIST FAQS
+
     if (command === "/listqa") {
       const result = await getFAQs(1, 8);
 
@@ -117,11 +118,14 @@ async function handleTelegramUpdate(update) {
       const faqList = result.faqs
         .map(
           (faq, index) =>
-            `${index + 1}. ${faq.question.slice(0, 120)}\nID: ${faq._id}`,
+            `${index + 1}. Question:\n${faq.question}\n\n` +
+            `Answer:\n${faq.answer}\n\n` +
+            `ID: ${faq._id}`,
         )
-        .join("\n\n");
+        .join("\n\n--------------------\n\n");
 
       await sendMessage(chatId, `FAQs (${result.total} total):\n\n${faqList}`);
+
       return;
     }
 
