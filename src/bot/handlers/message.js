@@ -15,24 +15,26 @@ const {
 const startCommand = require("../commands/start");
 
 const handleFAQCallback = require("../callbacks/faq");
+const handleBlockedCallback = require("../callbacks/blocked");
+
 const handleFAQConversation = require("../conversations/faq");
 const handleFAQCommand = require("../commands/faq");
 const handleAuthConversation = require("../conversations/auth");
 
-async function handleTelegramUpdate(update) {
-  async function handleTelegramUpdate(update) {
-    console.log("INCOMING UPDATE:", {
-      updateId: update?.update_id,
-      type: update?.callback_query ? "callback_query" : "message",
-      callbackData: update?.callback_query?.data,
-      messageText: update?.message?.text,
-      time: new Date().toISOString(),
-    });
+const { handleBlockedCommand } = require("../commands/blocked");
 
-    // باقي الكود
-  }
+async function handleTelegramUpdate(update) {
+  // CALLBACK QUERIES
   if (update?.callback_query) {
-    await handleFAQCallback(update.callback_query);
+    const callbackQuery = update.callback_query;
+    const callbackData = callbackQuery.data || "";
+
+    if (callbackData.startsWith("blocked:")) {
+      await handleBlockedCallback(callbackQuery);
+    } else {
+      await handleFAQCallback(callbackQuery);
+    }
+
     return;
   }
 
@@ -72,7 +74,7 @@ async function handleTelegramUpdate(update) {
   if (command === "/help") {
     await sendMessage(
       chatId,
-      "Available commands:\n/start - Start the bot\n/help - Show help\n/cancel - Cancel current operation",
+      "Available commands:\n/start - Start the bot\n/help - Show help\n/blocked - View blocked users (admin only)\n/cancel - Cancel current operation",
     );
     return;
   }
@@ -81,6 +83,11 @@ async function handleTelegramUpdate(update) {
   if (command === "/cancel") {
     await clearConversation(user);
     await sendMessage(chatId, "Operation cancelled.");
+    return;
+  }
+
+  // BLOCKED USERS COMMAND
+  if (await handleBlockedCommand(user, chatId, command)) {
     return;
   }
 

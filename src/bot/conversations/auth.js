@@ -3,6 +3,7 @@ const {
   isAdmin,
   authenticateUser,
   saveSharedPassword,
+  getBotSettings,
 } = require("../../modules/auth/service");
 
 const { sendMessage } = require("../../modules/telegram/service");
@@ -82,13 +83,37 @@ async function handleAuthConversation(user, chatId, text, messageId) {
       const result = await authenticateUser(user, text);
 
       if (!result.success) {
-        await sendMessage(
-          chatId,
-          result.reason === "PASSWORD_NOT_SET"
-            ? "The shared password has not been configured yet."
-            : "Incorrect password. Please try again.",
-        );
+        let message;
 
+        if (result.reason === "PASSWORD_NOT_SET") {
+          message = "The shared password has not been configured yet.";
+        } else if (result.reason === "USER_BLOCKED") {
+          message =
+            "Your account has been blocked after 5 incorrect password attempts. Contact the owner.";
+
+          if (result.blockedNow) {
+            const settings = await getBotSettings();
+
+            if (settings.ownerTelegramId) {
+              const fullName = [result.user.firstName, result.user.lastName]
+                .filter(Boolean)
+                .join(" ");
+
+              const username = result.user.username
+                ? `@${result.user.username}`
+                : "No username";
+
+              await sendMessage(
+                settings.ownerTelegramId,
+                `⚠️ User blocked after 5 incorrect password attempts.\n\nName: ${fullName}\nUsername: ${username}\nTelegram ID: ${result.user.telegramId}`,
+              );
+            }
+          }
+        } else {
+          message = `Incorrect password. ${result.remainingAttempts} attempts remaining.`;
+        }
+
+        await sendMessage(chatId, message);
         return true;
       }
 

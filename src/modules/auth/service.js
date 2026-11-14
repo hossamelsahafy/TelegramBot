@@ -175,6 +175,8 @@ async function saveSharedPassword(user, password) {
 }
 
 async function authenticateUser(user, password) {
+  const MAX_ATTEMPTS = 5;
+
   if (!user || user.isBlocked) {
     return {
       success: false,
@@ -201,14 +203,41 @@ async function authenticateUser(user, password) {
   const valid = await bcrypt.compare(password, settings.passwordHash);
 
   if (!valid) {
+    user.failedPasswordAttempts = (user.failedPasswordAttempts || 0) + 1;
+
+    const remainingAttempts = MAX_ATTEMPTS - user.failedPasswordAttempts;
+
+    if (remainingAttempts <= 0) {
+      user.isBlocked = true;
+      user.isAuthenticated = false;
+      await user.save();
+
+      return {
+        success: false,
+        reason: "USER_BLOCKED",
+        blockedNow: true,
+        remainingAttempts: 0,
+        user: {
+          telegramId: user.telegramId,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        },
+      };
+    }
+
+    await user.save();
+
     return {
       success: false,
       reason: "INVALID_PASSWORD",
+      remainingAttempts,
     };
   }
 
   user.isAuthenticated = true;
   user.authenticatedPasswordVersion = settings.passwordVersion;
+  user.failedPasswordAttempts = 0;
 
   await user.save();
 
@@ -225,6 +254,55 @@ async function authenticateTelegramUser(telegramUser) {
   return getOrCreateUser(telegramUser);
 }
 
+async function unblockUser(telegramId, admin) {
+  if (!(await isAdmin(admin))) {
+    throw new Error("Only the owner can unblock users");
+  }
+
+  const user = await User.findOneAndUpdate(
+    {
+      telegramId: Number(telegramId),
+      isBlocked: true,
+    },
+    {
+      $set: {
+        isBlocked: false,
+        failedPasswordAttempts: 0,
+        isAuthenticated: false,
+      },
+    },
+    { new: true },
+  );
+
+  return user;
+}
+
+async function getBlockedUsers(admin, page = 1, limit = 8) {
+  if (!(await isAdmin(admin))) {
+    throw new Error("Only the owner can view blocked users");
+  }
+
+  const safePage = Math.max(1, Number(page) || 1);
+
+  const [users, total] = await Promise.all([
+    User.find({ isBlocked: true })
+      .sort({ updatedAt: -1 })
+      .skip((safePage - 1) * limit)
+      .limit(limit)
+      .select("telegramId username firstName lastName failedPasswordAttempts")
+      .lean(),
+
+    User.countDocuments({ isBlocked: true }),
+  ]);
+
+  return {
+    users,
+    total,
+    page: safePage,
+    totalPages: Math.ceil(total / limit),
+  };
+}
+
 module.exports = {
   getBotSettings,
   getOrCreateUser,
@@ -235,4 +313,6 @@ module.exports = {
   saveSharedPassword,
   authenticateUser,
   isPasswordConfigured,
+  unblockUser,
+  getBlockedUsers,
 };
